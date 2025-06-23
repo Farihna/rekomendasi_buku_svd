@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
-
 import joblib
 
 # --- Konfigurasi Halaman Streamlit ---
 st.set_page_config(
     page_title="Rekomendasi Buku Goodreads",
     page_icon="📚",
-    layout="centered"
+    layout="wide"
 )
 
 # --- Fungsi untuk Memuat Data (dengan cache untuk performa) ---
@@ -19,7 +18,7 @@ def load_data():
         books_df_cleaned = books_df.drop_duplicates(subset=['book_id'], keep='first')
         return books_df_cleaned, ratings_df
     except FileNotFoundError:
-        st.error("Pastikan file 'books.csv' dan 'ratings.csv' ada di direktori yang sama.")
+        print("Pastikan file 'books.csv' dan 'ratings.csv' ada di direktori yang sama.")
         st.stop()
 
 # --- Fungsi untuk Memuat Model SVD (menggunakan joblib) ---
@@ -29,10 +28,9 @@ def load_model():
     try:
         # Menggunakan joblib.load untuk memuat model
         loaded_svd_model = joblib.load(model_path)
-        st.success("Model SVD berhasil dimuat!")
         return loaded_svd_model
     except FileNotFoundError:
-        st.error(f"Error: Model SVD tidak ditemukan di '{model_path}'.")
+        print(f"Error: Model SVD tidak ditemukan di '{model_path}'.")
         st.warning("Pastikan file model Anda ('svd_gs_model.pkl') berada di direktori yang sama dengan aplikasi Streamlit ini, atau sesuaikan path-nya.")
         st.stop() # Hentikan eksekusi jika model tidak ditemukan
 
@@ -93,22 +91,40 @@ if st.button("Dapatkan Rekomendasi", key="get_recommendations_button"):
         
         if not recommendations_df.empty:
             st.subheader(f"Top {len(recommendations_df)} Rekomendasi untuk Pengguna {user_id_input}:")
-            cols_display = st.columns(3)
-            for index, row in recommendations_df.iterrows():
-                with cols_display[index % 3]:
-                    st.write(f"**{row['original_title']}**")
-                    st.caption(f"Penulis: {row['authors']}")
-                    st.caption(f"Rating Rata-rata: {row['average_rating']:.2f}")
-                    st.caption(f"Rating Diprediksi: {row['predicted_rating']:.2f}")
-                    if pd.notna(row['image_url']) and row['image_url'].startswith('http'):
-                        st.image(row['image_url'], width=150, caption=row['original_title'])
-                    else:
-                        st.image("https://via.placeholder.com/150x200?text=No+Image", width=150, caption="Gambar tidak tersedia")
-                    st.markdown("---")
+            # Tampilkan dalam grid 4 kolom per baris
+            num_cols = 4
+            rows = [recommendations_df.iloc[i:i+num_cols] for i in range(0, len(recommendations_df), num_cols)]
+
+            for row_chunk in rows:
+                cols = st.columns(num_cols)
+                for col, (_, row) in zip(cols, row_chunk.iterrows()):
+                    with col:
+                        if pd.notna(row['image_url']) and row['image_url'].startswith('http'):
+                            st.image(row['image_url'], width=300)
+                        else:
+                            st.image("https://via.placeholder.com/150x200?text=No+Image", width=150)
+                        st.markdown(f"**{row['original_title']}**")
+                        st.caption(f"Penulis: {row['authors']}")
+                        st.caption(f"Rating Rata-rata: {row['average_rating']:.2f}")
+                        st.caption(f"Rating Diprediksi: {row['predicted_rating']:.2f}")
+
         else:
             st.info("Tidak ada rekomendasi yang ditemukan untuk user ID ini atau semua buku sudah dinilai.")
     else:
-        st.error("Model rekomendasi belum siap. Pastikan 'svd_gs_model.pkl' ada.")
+        print("Model rekomendasi belum siap. Pastikan 'svd_gs_model.pkl' ada.")
 
 st.markdown("---")
 st.info("Aplikasi ini menggunakan model SVD untuk merekomendasikan buku.")
+model_rmse = 0.901337  
+model_mae = 0.715  # Ganti dengan nilai MAE yang sesuai jika ada
+precision = 0.907026   
+recall = 0.920575
+f1_score = 0.910675
+
+# Tampilkan performa model di bagian paling bawah
+st.markdown("---")
+with st.expander("Performa Model"):
+    st.write(f"**Root Mean Squared Error (RMSE):** {model_rmse:.3f}")
+    st.write(f"**Precision:** {precision:.3f}")
+    st.write(f"**Recall:** {recall:.3f}")
+    st.write(f"**F1 Score:** {f1_score:.3f}")
